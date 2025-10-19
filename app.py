@@ -115,7 +115,7 @@ if st.session_state.stage == "quiz":
             st.subheader(f"{item['no']}번) 참/거짓 판단")
             st.markdown(f"### {item['prompt']}")
 
-            cols = st.columns(2)
+            cols = st.columns(2)  # ← 이 줄이 반드시 있어야 합니다!
             # O = True, X = False
             if cols[0].button("⭕ O (참) / True", use_container_width=True):
                 correct = item["answer_bool"] is True
@@ -131,4 +131,38 @@ if st.session_state.stage == "quiz":
                 st.rerun()
 
             if cols[1].button("❌ X (거짓) / False", use_container_width=True):
-                co
+                correct = item["answer_bool"] is False
+                st.session_state.history.append({
+                    "문항": item["no"],
+                    "유형": "판단",
+                    "문장": item["prompt"],
+                    "선택": "X",
+                    "정답": "O" if item["answer_bool"] else "X",
+                    "결과": "정답" if correct else "오답"
+                })
+                st.session_state.idx += 1
+                st.rerun()
+
+        else:
+            # 단어 제시만 (기억)
+            st.subheader(f"{item['no']}번) 단어 기억")
+            st.markdown(f"### {item['word']}")
+            st.info("이 단어를 기억하세요. (선택 없음)")
+
+            if st.button("기억했어요 → 다음", use_container_width=True):
+                # 기록용으로도 남겨둠
+                st.session_state.history.append({
+                    "문항": item["no"],
+                    "유형": "단어",
+                    "문장": "(단어 제시)",
+                    "선택": "(제시됨)",
+                    "정답": item["word"],
+                    "결과": "제시"
+                })
+                st.session_state.idx += 1
+                st.rerun()
+
+    else:
+        # 주관식 회상 단계로
+        st.session_state.stage = "recall"
+        st.rerun()
