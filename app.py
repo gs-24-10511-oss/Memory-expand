@@ -30,58 +30,41 @@ WORD_POOL = [
     "산", "강", "도시", "별", "비", "눈", "모래", "우산", "사과", "해바라기",
 ]
 
-TOTAL = 10  # 총 문항 수 (고정: 10)
-EVEN_INDEXES = [2, 4, 6, 8, 10]  # 짝수 문항 번호
+TOTAL = 10
+EVEN_INDEXES = [2, 4, 6, 8, 10]
 
 # ================== 유틸 함수 ==================
 def make_quiz(seed=None):
-    """10문제 구성: 홀수=판단, 짝수=단어"""
     if seed:
         random.seed(seed)
     else:
         random.seed()
 
-    # 홀수 5문항(판단): True/False 섞기 (true 3, false 2 예시)
     true_pick = random.sample(TRUE_STMTS, 3)
     false_pick = random.sample(FALSE_STMTS, 2)
     judge_pool = [(s, True) for s in true_pick] + [(s, False) for s in false_pick]
     random.shuffle(judge_pool)
 
-    # 짝수 5문항(단어)
     words = random.sample(WORD_POOL, 5)
 
-    # 1~10 구성
     problems = []
-    judge_idx = 0
-    word_idx = 0
+    ji = wi = 0
     for i in range(1, TOTAL + 1):
         if i % 2 == 1:
-            s, ans = judge_pool[judge_idx]
-            judge_idx += 1
-            problems.append({
-                "no": i,
-                "type": "judge",
-                "prompt": s,
-                "answer_bool": ans,  # True/False
-            })
+            s, ans = judge_pool[ji]; ji += 1
+            problems.append({"no": i, "type": "judge", "prompt": s, "answer_bool": ans})
         else:
-            w = words[word_idx]
-            word_idx += 1
-            problems.append({
-                "no": i,
-                "type": "word",
-                "word": w,          # 기억할 단어
-            })
+            w = words[wi]; wi += 1
+            problems.append({"no": i, "type": "word", "word": w})
     return problems
 
 def reset_quiz(seed=None):
-    st.session_state.problems = make_quiz(seed)   # ← 안전한 키 이름
+    st.session_state.problems = make_quiz(seed)
     st.session_state.idx = 0
-    st.session_state.history = []   # 진행 중 기록(판단 문제용)
-    st.session_state.mem_words = [it["word"] for it in st.session_state.problems if it["type"] == "word"]  # 5개
-    st.session_state.start_time = time.time()
-    st.session_state.stage = "quiz"   # quiz -> recall -> result
-    st.session_state.ans_recall = [""] * 5  # 주관식 입력 버퍼
+    st.session_state.history = []
+    st.session_state.mem_words = [it["word"] for it in st.session_state.problems if it["type"] == "word"]
+    st.session_state.stage = "quiz"
+    st.session_state.ans_recall = [""] * 5
 
 # ================== 사이드바 ==================
 with st.sidebar:
@@ -92,77 +75,149 @@ with st.sidebar:
     seed_val = st.text_input("랜덤 시드(선택, 동일세트 재현)", "")
     if st.button("새 퀴즈 시작"):
         reset_quiz(seed_val.strip() or None)
+        st.rerun()
 
-# 초기화
 if "stage" not in st.session_state:
     reset_quiz(seed=None)
 
-# ================== 본문 ==================
-st.title("🧠 기억 폭 확장 훈련 ver.2")
-st.caption("홀수 문항: 참/거짓(O/X) 선택 · 짝수 문항: 단어만 제시 → 끝나면 짝수 단어를 순서대로 입력")
-
-if st.session_state.stage == "quiz":
+# ================== 렌더링 함수 ==================
+def render_quiz():
     idx = st.session_state.idx
     problems = st.session_state.problems
 
-    if idx < TOTAL:
-        item = problems[idx]
-        st.markdown(f"**진행:** {idx + 1} / {TOTAL}")
-        st.progress(idx / TOTAL)
-        st.markdown("---")
+    st.title("🧠 기억 폭 확장 훈련 ver.2")
+    st.caption("홀수: 참/거짓(O/X) · 짝수: 단어 제시 → 끝나면 짝수 단어를 순서대로 입력")
 
-        if item["type"] == "judge":
-            st.subheader(f"{item['no']}번) 참/거짓 판단")
-            st.markdown(f"### {item['prompt']}")
+    # 모든 문제 완료 → 즉시 리콜 화면으로 전환 렌더
+    if idx >= TOTAL:
+        st.session_state.stage = "recall"
+        render_recall()   # ← rerun 없이 즉시 리콜화면 그리기
+        return
 
-            cols = st.columns(2)  # ← 이 줄이 반드시 있어야 합니다!
-            # O = True, X = False
-            if cols[0].button("⭕ O (참) / True", use_container_width=True):
-                correct = item["answer_bool"] is True
-                st.session_state.history.append({
-                    "문항": item["no"],
-                    "유형": "판단",
-                    "문장": item["prompt"],
-                    "선택": "O",
-                    "정답": "O" if item["answer_bool"] else "X",
-                    "결과": "정답" if correct else "오답"
-                })
-                st.session_state.idx += 1
-                st.rerun()
+    item = problems[idx]
+    st.markdown(f"**진행:** {idx + 1} / {TOTAL}")
+    st.progress(idx / TOTAL)
+    st.markdown("---")
 
-            if cols[1].button("❌ X (거짓) / False", use_container_width=True):
-                correct = item["answer_bool"] is False
-                st.session_state.history.append({
-                    "문항": item["no"],
-                    "유형": "판단",
-                    "문장": item["prompt"],
-                    "선택": "X",
-                    "정답": "O" if item["answer_bool"] else "X",
-                    "결과": "정답" if correct else "오답"
-                })
-                st.session_state.idx += 1
-                st.rerun()
+    if item["type"] == "judge":
+        st.subheader(f"{item['no']}번) 참/거짓 판단")
+        st.markdown(f"### {item['prompt']}")
 
-        else:
-            # 단어 제시만 (기억)
-            st.subheader(f"{item['no']}번) 단어 기억")
-            st.markdown(f"### {item['word']}")
-            st.info("이 단어를 기억하세요. (선택 없음)")
+        cols = st.columns(2)
+        if cols[0].button("⭕ O (참)", use_container_width=True):
+            correct = item["answer_bool"] is True
+            st.session_state.history.append({
+                "문항": item["no"], "유형": "판단", "문장": item["prompt"],
+                "선택": "O", "정답": "O" if item["answer_bool"] else "X",
+                "결과": "정답" if correct else "오답"
+            })
+            st.session_state.idx += 1
+            st.rerun()
 
-            if st.button("기억했어요 → 다음", use_container_width=True):
-                # 기록용으로도 남겨둠
-                st.session_state.history.append({
-                    "문항": item["no"],
-                    "유형": "단어",
-                    "문장": "(단어 제시)",
-                    "선택": "(제시됨)",
-                    "정답": item["word"],
-                    "결과": "제시"
-                })
-                st.session_state.idx += 1
-                st.rerun()
+        if cols[1].button("❌ X (거짓)", use_container_width=True):
+            correct = item["answer_bool"] is False
+            st.session_state.history.append({
+                "문항": item["no"], "유형": "판단", "문장": item["prompt"],
+                "선택": "X", "정답": "O" if item["answer_bool"] else "X",
+                "결과": "정답" if correct else "오답"
+            })
+            st.session_state.idx += 1
+            st.rerun()
 
     else:
-        # 주관식 회상 단계로
-        st.session_state.stage = "recall"
+        st.subheader(f"{item['no']}번) 단어 기억")
+        st.markdown(f"### {item['word']}")
+        st.info("이 단어를 기억하세요. (선택 없음)")
+
+        if st.button("기억했어요 → 다음", use_container_width=True):
+            st.session_state.history.append({
+                "문항": item["no"], "유형": "단어", "문장": "(단어 제시)",
+                "선택": "(제시됨)", "정답": item["word"], "결과": "제시"
+            })
+            st.session_state.idx += 1
+            st.rerun()
+
+def render_recall():
+    st.title("✍️ 기억 회상(짝수 문항)")
+    st.subheader("2, 4, 6, 8, 10번에 제시된 단어를 **순서대로** 입력하세요.")
+
+    labels = ["2번 단어", "4번 단어", "6번 단어", "8번 단어", "10번 단어"]
+    with st.form("recall_form"):
+        inputs = []
+        for i, label in enumerate(labels):
+            default = st.session_state.ans_recall[i]
+            inputs.append(st.text_input(label, value=default))
+        submitted = st.form_submit_button("채점하기")
+
+    if submitted:
+        st.session_state.ans_recall = inputs
+        gold = st.session_state.mem_words
+        user = [a.strip() for a in st.session_state.ans_recall]
+
+        rows = []
+        rs = 0
+        for i, (g, u) in enumerate(zip(gold, user), start=1):
+            ok = (u == g)
+            rs += 1 if ok else 0
+            rows.append({
+                "순번(짝수)": EVEN_INDEXES[i - 1],
+                "정답단어": g,
+                "내답": u if u else "미입력",
+                "결과": "정답" if ok else "오답"
+            })
+
+        st.session_state.recall_df = pd.DataFrame(rows)
+        st.session_state.recall_score = rs
+        st.session_state.judge_score = sum(1 for r in st.session_state.history if r["유형"] == "판단" and r["결과"] == "정답")
+        st.session_state.stage = "result"
         st.rerun()
+
+def render_result():
+    st.title("📊 결과 요약")
+
+    judge_score = st.session_state.judge_score
+    recall_score = st.session_state.recall_score
+    st.write(f"- 판단문항(홀수) 점수: **{judge_score} / 5**")
+    st.write(f"- 기억회상(짝수) 점수: **{recall_score} / 5**")
+    st.success(f"총점: **{judge_score + recall_score} / 10**")
+
+    st.markdown("---")
+    st.subheader("판단문항 기록")
+    df_judge = pd.DataFrame([r for r in st.session_state.history if r["유형"] == "판단"])
+    if not df_judge.empty:
+        df_judge.insert(0, "이름", name if name else "미기입")
+        df_judge.insert(1, "반", klass if klass else "미기입")
+        df_judge.insert(2, "번호", sid if sid else "미기입")
+        st.dataframe(df_judge, use_container_width=True)
+    else:
+        st.info("판단문항 기록이 없습니다.")
+
+    st.subheader("기억회상(짝수) 채점표")
+    df_recall = st.session_state.recall_df.copy()
+    df_recall.insert(0, "이름", name if name else "미기입")
+    df_recall.insert(1, "반", klass if klass else "미기입")
+    df_recall.insert(2, "번호", sid if sid else "미기입")
+    st.dataframe(df_recall, use_container_width=True)
+
+    st.markdown("### 📥 결과 CSV 다운로드")
+    if not df_judge.empty:
+        csv_judge = df_judge.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("판단문항 결과 다운로드", data=csv_judge,
+                           file_name=f"기폭훈련_판단_{name or '미기입'}.csv", mime="text/csv")
+    csv_recall = df_recall.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("기억회상 결과 다운로드", data=csv_recall,
+                       file_name=f"기폭훈련_회상_{name or '미기입'}.csv", mime="text/csv")
+
+    st.markdown("---")
+    if st.button("다시 시작(새 세트)"):
+        reset_quiz(seed=None)
+        st.rerun()
+
+# ================== 라우팅 ==================
+stage = st.session_state.stage
+if stage == "quiz":
+    render_quiz()
+elif stage == "recall":
+    render_recall()
+else:
+    render_result()
