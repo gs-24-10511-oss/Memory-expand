@@ -31,7 +31,7 @@ WORD_POOL = [
 ]
 
 TOTAL = 10  # 총 문항 수 (고정: 10)
-EVEN_INDEXES = [2,4,6,8,10]  # 짝수 문항 인덱스
+EVEN_INDEXES = [2, 4, 6, 8, 10]  # 짝수 문항 번호
 
 # ================== 유틸 함수 ==================
 def make_quiz(seed=None):
@@ -41,8 +41,7 @@ def make_quiz(seed=None):
     else:
         random.seed()
 
-    # 홀수 5문항(판단): True/False 섞기
-    # true 3개, false 2개(비율은 임의 조정 가능)
+    # 홀수 5문항(판단): True/False 섞기 (true 3, false 2 예시)
     true_pick = random.sample(TRUE_STMTS, 3)
     false_pick = random.sample(FALSE_STMTS, 2)
     judge_pool = [(s, True) for s in true_pick] + [(s, False) for s in false_pick]
@@ -52,14 +51,14 @@ def make_quiz(seed=None):
     words = random.sample(WORD_POOL, 5)
 
     # 1~10 구성
-    items = []
+    problems = []
     judge_idx = 0
     word_idx = 0
-    for i in range(1, TOTAL+1):
+    for i in range(1, TOTAL + 1):
         if i % 2 == 1:
             s, ans = judge_pool[judge_idx]
             judge_idx += 1
-            items.append({
+            problems.append({
                 "no": i,
                 "type": "judge",
                 "prompt": s,
@@ -68,21 +67,21 @@ def make_quiz(seed=None):
         else:
             w = words[word_idx]
             word_idx += 1
-            items.append({
+            problems.append({
                 "no": i,
                 "type": "word",
                 "word": w,          # 기억할 단어
             })
-    return items
+    return problems
 
 def reset_quiz(seed=None):
-    st.session_state.items = make_quiz(seed)
+    st.session_state.problems = make_quiz(seed)   # ← 이름 충돌 방지 (items → problems)
     st.session_state.idx = 0
     st.session_state.history = []   # 진행 중 기록(판단 문제용)
-    st.session_state.mem_words = [it["word"] for it in st.session_state.items if it["type"]=="word"]  # 5개
+    st.session_state.mem_words = [it["word"] for it in st.session_state.problems if it["type"] == "word"]  # 5개
     st.session_state.start_time = time.time()
     st.session_state.stage = "quiz"   # quiz -> recall -> result
-    st.session_state.ans_recall = [""]*5  # 주관식 입력 버퍼
+    st.session_state.ans_recall = [""] * 5  # 주관식 입력 버퍼
 
 # ================== 사이드바 ==================
 with st.sidebar:
@@ -104,11 +103,11 @@ st.caption("홀수 문항: 참/거짓(O/X) 선택 · 짝수 문항: 단어만 �
 
 if st.session_state.stage == "quiz":
     idx = st.session_state.idx
-    items = st.session_state.items
+    problems = st.session_state.problems
 
     if idx < TOTAL:
-        item = items[idx]
-        st.markdown(f"**진행:** {idx+1} / {TOTAL}")
+        item = problems[idx]
+        st.markdown(f"**진행:** {idx + 1} / {TOTAL}")
         st.progress(idx / TOTAL)
         st.markdown("---")
 
@@ -194,19 +193,19 @@ elif st.session_state.stage == "recall":
             if ok:
                 recall_score += 1
             recall_rows.append({
-                "순번(짝수)": EVEN_INDEXES[i-1],
+                "순번(짝수)": EVEN_INDEXES[i - 1],
                 "정답단어": g,
                 "내답": u if u else "미입력",
                 "결과": "정답" if ok else "오답"
             })
 
-        # recall 결과를 history 뒤에 합산(표시용)
+        # recall 결과를 기록
         df_recall = pd.DataFrame(recall_rows)
         st.session_state.recall_df = df_recall
         st.session_state.recall_score = recall_score
 
         # 판단문항 점수
-        judge_score = sum(1 for r in st.session_state.history if r["유형"]=="판단" and r["결과"]=="정답")
+        judge_score = sum(1 for r in st.session_state.history if r["유형"] == "판단" and r["결과"] == "정답")
         st.session_state.judge_score = judge_score
 
         st.session_state.stage = "result"
@@ -224,9 +223,8 @@ elif st.session_state.stage == "result":
 
     st.markdown("---")
     st.subheader("판단문항 기록")
-    df_judge = pd.DataFrame([r for r in st.session_state.history if r["유형"]=="판단"])
+    df_judge = pd.DataFrame([r for r in st.session_state.history if r["유형"] == "판단"])
     if not df_judge.empty:
-        # 메타 정보 삽입
         df_judge.insert(0, "이름", name if name else "미기입")
         df_judge.insert(1, "반", klass if klass else "미기입")
         df_judge.insert(2, "번호", sid if sid else "미기입")
